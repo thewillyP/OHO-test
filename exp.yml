@@ -1,4 +1,4 @@
-program: /metaopt/mnist/main.py
+program: /OHO-test/metaopt/mnist/main.py
 name: oho_test
 method: grid
 version: 1.0.0
@@ -49,7 +49,7 @@ parameters:
     value: 500
 
   save_dir:
-    value: "/scratch/refactor"
+    value: "/dump"
 
   xdim:
     value: 28

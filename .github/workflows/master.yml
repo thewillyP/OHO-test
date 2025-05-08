@@ -8,6 +8,7 @@ on:
       - .github/workflows/** 
       - metaopt/**
       - entrypoint.sh
+      - setup.py
     branches:
       - 'master'
     tags:
