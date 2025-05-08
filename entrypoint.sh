@@ -40,7 +40,7 @@ fi
 SWEEP_ID="$1"
 CONTROLLER_URL="$2"
 
-git config --global --add safe.directory /rnn-test
+git config --global --add safe.directory /OHO-test
 
 echo "Starting sweep-agent with:"
 echo "  Sweep ID: $SWEEP_ID"

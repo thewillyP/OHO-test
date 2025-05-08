@@ -3,11 +3,11 @@ FROM thewillyp/devenv:master-1.0.32-${VARIANT}
 
 WORKDIR /
 
-RUN git clone https://github.com/thewillyP/rnn-test.git
+RUN git clone https://github.com/thewillyP/OHO-test.git
 
-WORKDIR /rnn-test
+WORKDIR /OHO-test
 
-RUN chmod -R 777 /rnn-test
+RUN chmod -R 777 /OHO-test
 
 RUN pip install .
 
