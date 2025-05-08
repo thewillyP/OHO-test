@@ -1,0 +1,26 @@
+name: ci
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - Dockerfile 
+      - .github/workflows/** 
+      - metaopt/**
+      - entrypoint.sh
+    branches:
+      - 'master'
+    tags:
+      - 'v*'
+
+jobs:
+  docker:
+    strategy:
+      matrix:
+        variant: [cpu, gpu] 
+    uses: thewillyP/ReusableWorkflow/.github/workflows/main.yml@main
+    with:
+      image_name: oho-test
+      tag: 1.0.${{ github.run_number }}-${{ matrix.variant }}
+      build_args: VARIANT=${{ matrix.variant }} 
+    secrets: inherit
