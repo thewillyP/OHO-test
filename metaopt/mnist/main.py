@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-import os, argparse, time
+import os, time
 import torch
 import torch.optim as optim
 from torch.utils.data import DataLoader
@@ -11,7 +11,7 @@ import torch.nn.functional as F
 from itertools import cycle
 import hashlib
 from metaopt.mnist.mlp import MLP
-from metaopt.util import check_args, to_torch_variable, save
+from metaopt.util import to_torch_variable
 from metaopt.util_ml import compute_correlation
 from torch.nn.utils import parameters_to_vector, vector_to_parameters
 from sweep_agent.agent import get_sweep_config
@@ -275,14 +275,19 @@ def save_object_as_wandb_artifact(obj, artifact_name: str, fdir: str, filename: 
 def load_mnist(args: Config):
     ## Initialize Dataset
     dataset = datasets.MNIST(
-        "data/mnist", train=True, download=True, transform=transforms.Compose([transforms.ToTensor()])
+        f"{args.save_dir}/data/mnist", train=True, download=True, transform=transforms.Compose([transforms.ToTensor()])
     )
     train_set, valid_set = torch.utils.data.random_split(dataset, [60000 - args.valid_size, args.valid_size])
 
     data_loader_tr = DataLoader(train_set, batch_size=args.batch_size, shuffle=True)
     data_loader_vl = DataLoader(valid_set, batch_size=args.batch_size_vl, shuffle=True)
     data_loader_te = DataLoader(
-        datasets.MNIST("data/mnist", train=False, download=True, transform=transforms.Compose([transforms.ToTensor()])),
+        datasets.MNIST(
+            f"{args.save_dir}/data/mnist",
+            train=False,
+            download=True,
+            transform=transforms.Compose([transforms.ToTensor()]),
+        ),
         batch_size=args.batch_size,
         shuffle=True,
     )

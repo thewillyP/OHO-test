@@ -11,6 +11,8 @@ __pycache__/
 *-ubyte
 *.gz
 **/wandb/*
+*.err 
+*.log
 
 # C extensions
 *.so
