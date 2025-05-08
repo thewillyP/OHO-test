@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import random
 import os, time
 import torch
 import torch.optim as optim
@@ -21,6 +22,7 @@ import joblib
 
 @dataclass
 class Config:
+    project: str = "new_metaopt"
     test_freq: int = 10
     rng: int = 0
     num_epoch: int = 100
@@ -272,6 +274,12 @@ def save_object_as_wandb_artifact(obj, artifact_name: str, fdir: str, filename: 
     wandb.log_artifact(artifact)
 
 
+def seed_worker(worker_id):
+    worker_seed = torch.initial_seed() % 2**32
+    np.random.seed(worker_seed)
+    random.seed(worker_seed)
+
+
 def load_mnist(args: Config):
     ## Initialize Dataset
     dataset = datasets.MNIST(
@@ -279,8 +287,12 @@ def load_mnist(args: Config):
     )
     train_set, valid_set = torch.utils.data.random_split(dataset, [60000 - args.valid_size, args.valid_size])
 
-    data_loader_tr = DataLoader(train_set, batch_size=args.batch_size, shuffle=True)
-    data_loader_vl = DataLoader(valid_set, batch_size=args.batch_size_vl, shuffle=True)
+    data_loader_tr = DataLoader(
+        train_set, batch_size=args.batch_size, shuffle=True, worker_init_fn=seed_worker, num_workers=0
+    )
+    data_loader_vl = DataLoader(
+        valid_set, batch_size=args.batch_size_vl, shuffle=True, worker_init_fn=seed_worker, num_workers=0
+    )
     data_loader_te = DataLoader(
         datasets.MNIST(
             f"{args.save_dir}/data/mnist",
@@ -290,8 +302,16 @@ def load_mnist(args: Config):
         ),
         batch_size=args.batch_size,
         shuffle=True,
+        worker_init_fn=seed_worker,
+        num_workers=0,
     )
 
+    # def infinite_loader(loader):
+    #     while True:
+    #         for batch in loader:
+    #             yield batch
+
+    # data_loader_vl = infinite_loader(data_loader_vl)
     data_loader_vl = cycle(data_loader_vl)
     dataset = [data_loader_tr, data_loader_vl, data_loader_te]
     return dataset
@@ -555,10 +575,11 @@ if __name__ == "__main__":
         "mode": "offline",
         "group": sweep_config.name,
         "config": sweep_config.config,
-        "project": "new_metaopt",
+        "project": sweep_config.config["project"],
     }
 
     with wandb.init(**wandb_kwargs) as run:
         args = Config(**run.config)
         torch.manual_seed(args.rng)
+        torch.use_deterministic_algorithms(True)
         main(args)

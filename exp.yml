@@ -8,6 +8,9 @@ metric:
 
 parameters:
 
+  project:
+    value: "cpu-test"
+
   test_freq:
     value: 1
 
