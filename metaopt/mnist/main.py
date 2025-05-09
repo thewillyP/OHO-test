@@ -10,7 +10,6 @@ import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
 from itertools import cycle
-import hashlib
 from metaopt.mnist.mlp import MLP
 from metaopt.util import to_torch_variable
 from metaopt.util_ml import compute_correlation
@@ -18,6 +17,11 @@ from torch.nn.utils import parameters_to_vector, vector_to_parameters
 from sweep_agent.agent import get_sweep_config
 import wandb
 import joblib
+
+
+TRAIN = 0
+VALID = 1
+TEST = 2
 
 
 @dataclass
@@ -193,74 +197,6 @@ class RNNModel(nn.Module):
         delta = val_grad.dot(self.dFdl2).data.cpu().numpy()
         self.lambda_l2 -= mlr * delta
         self.lambda_l2 = np.clip(self.lambda_l2, 0, 0.0002)
-
-
-TRAIN = 0
-VALID = 1
-TEST = 2
-
-
-def compute_md5(file_path):
-    """Compute MD5 hash of a file."""
-    hash_md5 = hashlib.md5()
-    with open(file_path, "rb") as f:
-        for chunk in iter(lambda: f.read(4096), b""):
-            hash_md5.update(chunk)
-    return hash_md5.hexdigest()
-
-
-def compare_npy_files(new_dir, ref_dir, file_names):
-    """Compare .npy files in new_dir against reference files in ref_dir."""
-    mismatched_files = []
-    for file_name in file_names:
-        new_file = os.path.join(new_dir, file_name + ".npy")
-        ref_file = os.path.join(ref_dir, file_name + ".npy")
-
-        if not os.path.exists(ref_file):
-            print(f"Reference file {ref_file} does not exist.")
-            continue
-        if not os.path.exists(new_file):
-            print(f"New file {new_file} does not exist.")
-            continue
-
-        new_hash = compute_md5(new_file)
-        ref_hash = compute_md5(ref_file)
-
-        if new_hash != ref_hash:
-            print(f"Hash mismatch in {file_name}: New hash {new_hash}, Ref hash {ref_hash}")
-
-            # Load and compare the .npy files
-            try:
-                new_data = np.load(new_file)
-                ref_data = np.load(ref_file)
-
-                if new_data.shape != ref_data.shape:
-                    print(f"  Shape mismatch: New shape {new_data.shape}, Ref shape {ref_data.shape}")
-                    mismatched_files.append((file_name, new_hash, ref_hash))
-                elif not np.allclose(new_data, ref_data, rtol=1e-5, atol=1e-8):
-                    # Find indices and values where arrays differ significantly
-                    diff_indices = np.where(~np.isclose(new_data, ref_data, rtol=1e-5, atol=1e-8))
-                    print(f"  Arrays differ at {len(diff_indices[0])} positions:")
-                    for idx in zip(*diff_indices):
-                        print(f"    Index {idx}: New value {new_data[idx]}, Ref value {ref_data[idx]}")
-                    mismatched_files.append((file_name, new_hash, ref_hash))
-                else:
-                    print(
-                        "  Arrays are equivalent within tolerance despite hash mismatch (possible metadata difference)."
-                    )
-            except Exception as e:
-                print(f"  Error loading .npy files for comparison: {e}")
-                mismatched_files.append((file_name, new_hash, ref_hash))
-        else:
-            print(f"Match confirmed for {file_name}: Hash {new_hash}")
-
-    if mismatched_files:
-        print("Warning: The following files do not match the reference:")
-        for file_name, new_hash, ref_hash in mismatched_files:
-            print(f"{file_name}: New hash {new_hash}, Ref hash {ref_hash}")
-        raise ValueError("Refactored code produces different .npy files.")
-    else:
-        print("All .npy files match the reference files or are within tolerance.")
 
 
 def save_object_as_wandb_artifact(obj, artifact_name: str, fdir: str, filename: str, artifact_type: str) -> None:
@@ -580,6 +516,13 @@ if __name__ == "__main__":
 
     with wandb.init(**wandb_kwargs) as run:
         args = Config(**run.config)
-        torch.manual_seed(args.rng)
+        seed = args.rng
+        random.seed(seed)
+        os.environ["PYTHONHASHSEED"] = str(seed)
+        np.random.seed(seed)
+        torch.manual_seed(seed)
         torch.use_deterministic_algorithms(True)
+        torch.cuda.manual_seed(seed)
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = True
         main(args)

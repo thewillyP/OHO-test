@@ -5,8 +5,8 @@
 #SBATCH --time=01:00:00
 #SBATCH --job-name=oho_experiments
 #SBATCH --gres=gpu:0
-#SBATCH --cpus-per-task=8
-#SBATCH --array=1-1
+#SBATCH --cpus-per-task=4
+#SBATCH --array=1-20
 #SBATCH --output="/vast/wlp9800/logs/%x-%A-%a.out"
 #SBATCH --error="/vast/wlp9800/logs/%x-%A-%a.err"
 
