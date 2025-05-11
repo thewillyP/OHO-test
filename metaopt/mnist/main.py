@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 import random
 import os, time
+from typing import Union
+
 import torch
 import torch.optim as optim
 from torch.utils.data import DataLoader
@@ -18,7 +20,6 @@ from sweep_agent.agent import get_sweep_config
 import wandb
 import joblib
 
-
 TRAIN = 0
 VALID = 1
 TEST = 2
@@ -26,6 +27,7 @@ TEST = 2
 
 @dataclass
 class Config:
+    dataset: str = Union["mnist", "fashionmnist"]
     project: str = "new_metaopt"
     test_freq: int = 10
     rng: int = 0
@@ -47,7 +49,7 @@ class Config:
     checkpoint_freq: int = 10
     is_cuda: int = 0
     save: int = 0
-    save_dir: str = "/scratch/"
+    save_dir: str = "/scratch"
 
 
 class VanillaRNNModel(nn.Module):
@@ -91,6 +93,14 @@ class VanillaRNNModel(nn.Module):
     def forward(self, x, logsoftmaxF=1):
         if x.dim() > 2:
             x = x.view(x.size(0), -1, self.input_size)
+
+        # Create random normal hidden state
+        # h0 = torch.randn(self.num_layers, x.size(0), self.hidden_size)  # (num_layers, batch_size, hidden_size)
+
+        # if self.is_cuda:
+        #     h0 = h0.cuda()
+
+        # out, _ = self.rnn(x, h0)
         out, _ = self.rnn(x)
         out = self.fc(out[:, -1, :])
         return F.log_softmax(out, dim=1) if logsoftmaxF else F.softmax(out, dim=1)
@@ -100,7 +110,7 @@ class VanillaRNNModel(nn.Module):
         self.Hlr_norm = torch.norm(self.Hlr)
         self.dFdlr_norm = torch.norm(self.dFdlr)
         self.dFdlr.data = (
-            self.dFdlr.data * (1 - 2 * self.lambda_l2 * self.eta) - self.Hlr - grad - 2 * self.lambda_l2 * param
+                self.dFdlr.data * (1 - 2 * self.lambda_l2 * self.eta) - self.Hlr - grad - 2 * self.lambda_l2 * param
         )
 
     def update_dFdlambda_l2(self, Hv, param):
@@ -115,7 +125,6 @@ class VanillaRNNModel(nn.Module):
         self.eta = max(0.0, self.eta)
 
     def update_lambda(self, mlr, val_grad):
-        val_grad = torch.cat([v.view(-1) for v in val_grad])
         delta = val_grad.dot(self.dFdl2).data.cpu().numpy()
         self.lambda_l2 -= mlr * delta
         self.lambda_l2 = np.clip(self.lambda_l2, 0, 0.0002)
@@ -178,7 +187,7 @@ class RNNModel(nn.Module):
         self.Hlr_norm = torch.norm(self.Hlr)
         self.dFdlr_norm = torch.norm(self.dFdlr)
         self.dFdlr.data = (
-            self.dFdlr.data * (1 - 2 * self.lambda_l2 * self.eta) - self.Hlr - grad - 2 * self.lambda_l2 * param
+                self.dFdlr.data * (1 - 2 * self.lambda_l2 * self.eta) - self.Hlr - grad - 2 * self.lambda_l2 * param
         )
 
     def update_dFdlambda_l2(self, Hv, param):
@@ -193,7 +202,6 @@ class RNNModel(nn.Module):
         self.eta = max(0.0, self.eta)
 
     def update_lambda(self, mlr, val_grad):
-        val_grad = torch.cat([v.view(-1) for v in val_grad])
         delta = val_grad.dot(self.dFdl2).data.cpu().numpy()
         self.lambda_l2 -= mlr * delta
         self.lambda_l2 = np.clip(self.lambda_l2, 0, 0.0002)
@@ -211,15 +219,21 @@ def save_object_as_wandb_artifact(obj, artifact_name: str, fdir: str, filename: 
 
 
 def seed_worker(worker_id):
-    worker_seed = torch.initial_seed() % 2**32
+    worker_seed = torch.initial_seed() % 2 ** 32
     np.random.seed(worker_seed)
     random.seed(worker_seed)
 
 
-def load_mnist(args: Config):
-    ## Initialize Dataset
-    dataset = datasets.MNIST(
-        f"{args.save_dir}/data/mnist", train=True, download=True, transform=transforms.Compose([transforms.ToTensor()])
+def load_dataset(args, dataset_fn):
+    test_dataset = dataset_fn(
+        f"{args.save_dir}/data/mnist",
+        train=False,
+        download=True,
+        transform=transforms.Compose([transforms.ToTensor()]),
+    )
+    dataset = dataset_fn(
+        f"{args.save_dir}/data/mnist", train=True, download=True,
+        transform=transforms.Compose([transforms.ToTensor()])
     )
     train_set, valid_set = torch.utils.data.random_split(dataset, [60000 - args.valid_size, args.valid_size])
 
@@ -230,31 +244,31 @@ def load_mnist(args: Config):
         valid_set, batch_size=args.batch_size_vl, shuffle=True, worker_init_fn=seed_worker, num_workers=0
     )
     data_loader_te = DataLoader(
-        datasets.MNIST(
-            f"{args.save_dir}/data/mnist",
-            train=False,
-            download=True,
-            transform=transforms.Compose([transforms.ToTensor()]),
-        ),
+        test_dataset,
         batch_size=args.batch_size,
         shuffle=True,
         worker_init_fn=seed_worker,
         num_workers=0,
     )
 
-    # def infinite_loader(loader):
-    #     while True:
-    #         for batch in loader:
-    #             yield batch
+    def infinite_loader(loader):
+        while True:
+            for batch in loader:
+                yield batch
 
-    # data_loader_vl = infinite_loader(data_loader_vl)
-    data_loader_vl = cycle(data_loader_vl)
+    data_loader_vl = infinite_loader(data_loader_vl)
     dataset = [data_loader_tr, data_loader_vl, data_loader_te]
     return dataset
 
 
 def main(args: Config):
-    dataset = load_mnist(args)
+    match args.dataset:
+        case "mnist":
+            dataset = load_dataset(args, datasets.MNIST)
+        case "fashionmnist":
+            dataset = load_dataset(args, datasets.FashionMNIST)
+        case _:
+            raise NotImplementedError
 
     ## Initialize Model and Optimizer
     hdims = [args.xdim] + [args.hdim] * args.num_hlayers + [args.ydim]
@@ -448,6 +462,19 @@ def feval(data, target, model):
 
 
 def compute_HessianVectorProd(dFdS, data, target, unupdated):
+    # eps_machine = np.finfo(data.data.cpu().numpy().dtype).eps
+    #
+    # ## Compute Hessian Vector product h
+    # vmax_x, vmax_d = 0, 0
+    # param = parameters_to_vector(unupdated.parameters())
+    # vmax_x = np.maximum(vmax_x, torch.max(torch.abs(param)).item())
+    # vmax_d = np.maximum(vmax_d, torch.max(torch.abs(dFdS)).item())
+    # if vmax_d == 0:
+    #     vmax_d = 1
+    # Hess_est_r = np.sqrt(eps_machine) * (1 + vmax_x) / vmax_d
+    # Hess_est_r = max([Hess_est_r, 0.001])
+    # wandb.log({"Hess_est_r": Hess_est_r}, commit=False)
+
     Hess_est_r = 1e-3
 
     def perturb(model, vector):
@@ -471,7 +498,7 @@ def compute_HessianVectorProd(dFdS, data, target, unupdated):
 def meta_update(args, data_vl, target_vl, data_tr, target_tr, model, optimizer, unupdated):
     # Compute Hessian Vector Product
     Hv_lr = compute_HessianVectorProd(model.dFdlr, data_tr, target_tr, unupdated)
-    # Hv_l2 = compute_HessianVectorProd(model.dFdl2, data_tr, target_tr, unupdated, is_cuda)
+    Hv_l2 = compute_HessianVectorProd(model.dFdl2, data_tr, target_tr, unupdated)
 
     val_model = deepcopy(model)
     val_model.train()
@@ -489,6 +516,8 @@ def meta_update(args, data_vl, target_vl, data_tr, target_tr, model, optimizer, 
     # Update hyper-parameters
     model.update_dFdlr(Hv_lr, param, grad)
     model.update_eta(args.mlr, grad_valid)
+    model.update_dFdlambda_l2(Hv_l2, param)
+    model.update_lambda(args.mlr, grad_valid)
     # Update optimizer with new eta
     optimizer = update_optimizer_hyperparams(model, optimizer)
 
