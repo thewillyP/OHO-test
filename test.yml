@@ -8,6 +8,12 @@ metric:
 
 parameters:
 
+  xdim:
+    value: 28
+
+  num_hlayers:
+    value: 1
+
   dataset:
     value: "fashionmnist"
 
@@ -42,7 +48,7 @@ parameters:
     value: 1
 
   model_type:
-    value: "mlp"
+    value: "rnn"
 
   num_epoch:
     value: 100

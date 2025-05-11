@@ -1,5 +1,5 @@
 program: /OHO-test/metaopt/mnist/main.py
-name: oho_mlp_fixed_replica
+name: oho_rnn
 method: grid
 version: 1.0.0
 metric:
@@ -7,6 +7,12 @@ metric:
   goal: minimize
 
 parameters:
+
+  xdim:
+    value: 28
+
+  num_hlayers:
+    value: 1
 
   dataset:
     value: "fashionmnist"
@@ -42,7 +48,7 @@ parameters:
     value: 1
 
   model_type:
-    value: "mlp"
+    value: "rnn"
 
   num_epoch:
     value: 100

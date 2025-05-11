@@ -1,5 +1,5 @@
 program: /OHO-test/metaopt/mnist/main.py
-name: oho_mlp_fixed
+name: oho_rnn_fixed
 method: grid
 version: 1.0.0
 metric:
@@ -8,14 +8,23 @@ metric:
 
 parameters:
 
+  xdim:
+    value: 28
+
+  num_hlayers:
+    value: 1
+
+  dataset:
+    value: "fashionmnist"
+
   project:
-    value: "mlp-lr_only-test"
+    value: "metaopt_fashionmnist"
 
   test_freq:
     value: 1
 
   rng:
-    values: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+    values: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50]
 
   is_cuda:
     value: 0
@@ -24,10 +33,10 @@ parameters:
     values: [0.0]
 
   lr:
-    values: [0.6, 0.379578132, 0.240132598, 0.151915138, 0.0961061074, 0.0607996279, 0.038463682, 0.0243332876, 0.0153939731, 0.00973869261, 0.00616099125, 0.00389762926, 0.00246575806, 0.00155991306, 0.000986848145, 0.00062430996, 0.000394957347, 0.000249861954, 0.000158070223, 0.0001]
+    values: [0.6, 0.29475948, 0.14480525, 0.07113787, 0.0349476, 0.01716856, 0.00843433, 0.0041435, 0.00203556, 0.001]
 
   lambda_l2:
-    value: 0.0
+    value: 2.e-4
 
   opt_type:
     value: "sgd"
@@ -39,17 +48,17 @@ parameters:
     value: 1
 
   model_type:
-    value: "mlp"
+    value: "rnn"
 
   num_epoch:
     value: 100
 
   batch_size_vl:
-    value: 500
-
-  batch_size:
-    value: 500
+    value: 100
 
   save_dir:
     value: "/dump"
+
+  checkpoint_freq:
+    value: 200
 
