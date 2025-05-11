@@ -1,5 +1,5 @@
 program: /OHO-test/metaopt/mnist/main.py
-name: oho_rnn_fixed
+name: oho_mlp_fixed
 method: grid
 version: 1.0.0
 metric:
@@ -8,17 +8,14 @@ metric:
 
 parameters:
 
-  xdim:
-    value: 28
-
-  num_hlayers:
-    value: 1
+  hv_r:
+    values: [1.e-3]
 
   dataset:
     value: "fashionmnist"
 
   project:
-    value: "metaopt_fashionmnist"
+    value: "metaopt_fashionmnist_batch1000"
 
   test_freq:
     value: 1
@@ -48,13 +45,16 @@ parameters:
     value: 1
 
   model_type:
-    value: "rnn"
+    value: "mlp"
 
   num_epoch:
     value: 100
 
+  batch_size:
+    value: 1000
+
   batch_size_vl:
-    value: 100
+    value: 1000
 
   save_dir:
     value: "/dump"

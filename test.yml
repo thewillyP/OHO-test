@@ -8,17 +8,8 @@ metric:
 
 parameters:
 
-  use_64:
-    value: 1
-
   hv_r:
-    values: [1.e-4]
-
-  xdim:
-    value: 28
-
-  num_hlayers:
-    value: 1
+    values: [1.e-3]
 
   dataset:
     value: "fashionmnist"
@@ -30,7 +21,7 @@ parameters:
     value: 1
 
   rng:
-    values: [2]
+    values: [4]
 
   is_cuda:
     value: 0
@@ -54,13 +45,16 @@ parameters:
     value: 1
 
   model_type:
-    value: "rnn"
+    value: "mlp"
 
   num_epoch:
     value: 100
 
+  batch_size:
+    value: 1000
+
   batch_size_vl:
-    value: 100
+    value: 1000
 
   save_dir:
     value: "/scratch"
