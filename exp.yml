@@ -1,4 +1,4 @@
-program: /OHO-clone/metaopt/mnist/main.py
+program: /OHO-test/metaopt/mnist/main.py
 name: oho_mlp_fixed_replica
 method: grid
 version: 1.0.0
