@@ -12,7 +12,7 @@
 
 
 IMAGE=oho-test
-VERSION=1.0.7
+VERSION=1.0.8
 DOCKER_URL="docker://thewillyp/${IMAGE}:master-${VERSION}"
 
 # Build the Singularity image

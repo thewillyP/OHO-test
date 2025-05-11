@@ -2,7 +2,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --mem=14G
-#SBATCH --time=01:20:00
+#SBATCH --time=02:00:00
 #SBATCH --job-name=oho_experiments
 #SBATCH --gres=gpu:0
 #SBATCH --cpus-per-task=4

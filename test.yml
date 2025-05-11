@@ -8,6 +8,12 @@ metric:
 
 parameters:
 
+  use_64:
+    value: 1
+
+  hv_r:
+    values: [1.e-4]
+
   xdim:
     value: 28
 
@@ -24,7 +30,7 @@ parameters:
     value: 1
 
   rng:
-    values: [4]
+    values: [2]
 
   is_cuda:
     value: 0

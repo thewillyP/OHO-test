@@ -27,6 +27,8 @@ TEST = 2
 
 @dataclass
 class Config:
+    use_64: int = 0
+    hv_r: float = 1e-3
     dataset: str = Union["mnist", "fashionmnist"]
     project: str = "new_metaopt"
     test_freq: int = 10
@@ -127,7 +129,8 @@ class VanillaRNNModel(nn.Module):
     def update_lambda(self, mlr, val_grad):
         delta = val_grad.dot(self.dFdl2).data.cpu().numpy()
         self.lambda_l2 -= mlr * delta
-        self.lambda_l2 = np.clip(self.lambda_l2, 0, 0.0002)
+        self.lambda_l2 = np.maximum(0, self.lambda_l2)
+        # self.lambda_l2 = np.clip(self.lambda_l2, 0, 0.0002)
 
 
 class RNNModel(nn.Module):
@@ -204,7 +207,8 @@ class RNNModel(nn.Module):
     def update_lambda(self, mlr, val_grad):
         delta = val_grad.dot(self.dFdl2).data.cpu().numpy()
         self.lambda_l2 -= mlr * delta
-        self.lambda_l2 = np.clip(self.lambda_l2, 0, 0.0002)
+        self.lambda_l2 = np.maximum(0, self.lambda_l2)
+        # self.lambda_l2 = np.clip(self.lambda_l2, 0, 0.0002)
 
 
 def save_object_as_wandb_artifact(obj, artifact_name: str, fdir: str, filename: str, artifact_type: str) -> None:
@@ -461,21 +465,8 @@ def feval(data, target, model):
     return model, loss.item(), accuracy
 
 
-def compute_HessianVectorProd(dFdS, data, target, unupdated):
-    # eps_machine = np.finfo(data.data.cpu().numpy().dtype).eps
-    #
-    # ## Compute Hessian Vector product h
-    # vmax_x, vmax_d = 0, 0
-    # param = parameters_to_vector(unupdated.parameters())
-    # vmax_x = np.maximum(vmax_x, torch.max(torch.abs(param)).item())
-    # vmax_d = np.maximum(vmax_d, torch.max(torch.abs(dFdS)).item())
-    # if vmax_d == 0:
-    #     vmax_d = 1
-    # Hess_est_r = np.sqrt(eps_machine) * (1 + vmax_x) / vmax_d
-    # Hess_est_r = max([Hess_est_r, 0.001])
-    # wandb.log({"Hess_est_r": Hess_est_r}, commit=False)
-
-    Hess_est_r = 1e-3
+def compute_HessianVectorProd(args: Config, dFdS, data, target, unupdated):
+    Hess_est_r = args.hv_r
 
     def perturb(model, vector):
         current_params = parameters_to_vector(model.parameters())
@@ -495,10 +486,10 @@ def compute_HessianVectorProd(dFdS, data, target, unupdated):
     return Hv
 
 
-def meta_update(args, data_vl, target_vl, data_tr, target_tr, model, optimizer, unupdated):
+def meta_update(args: Config, data_vl, target_vl, data_tr, target_tr, model, optimizer, unupdated):
     # Compute Hessian Vector Product
-    Hv_lr = compute_HessianVectorProd(model.dFdlr, data_tr, target_tr, unupdated)
-    Hv_l2 = compute_HessianVectorProd(model.dFdl2, data_tr, target_tr, unupdated)
+    Hv_lr = compute_HessianVectorProd(args, model.dFdlr, data_tr, target_tr, unupdated)
+    Hv_l2 = compute_HessianVectorProd(args, model.dFdl2, data_tr, target_tr, unupdated)
 
     val_model = deepcopy(model)
     val_model.train()
@@ -545,6 +536,8 @@ if __name__ == "__main__":
 
     with wandb.init(**wandb_kwargs) as run:
         args = Config(**run.config)
+        if args.use_64:
+            torch.set_default_dtype(torch.float64)
         seed = args.rng
         random.seed(seed)
         os.environ["PYTHONHASHSEED"] = str(seed)
