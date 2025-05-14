@@ -57,7 +57,7 @@ parameters:
     value: 1000
 
   batch_size_vl:
-    value: 1000
+    value: 100
 
   save_dir:
     value: "/dump"
