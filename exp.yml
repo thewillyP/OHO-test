@@ -1,5 +1,5 @@
 program: /OHO-test/metaopt/mnist/main.py
-name: oho_mlp_
+name: oho_mlp_1000vl_mlre6
 method: grid
 version: 1.0.0
 metric:
@@ -54,7 +54,7 @@ parameters:
     value: 100
 
   batch_size:
-    value: 1000
+    value: 10
 
   batch_size_vl:
     value: 100
