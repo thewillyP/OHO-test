@@ -5,10 +5,16 @@ import pandas as pd
 import json
 from datetime import datetime
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from queue import Queue
+import threading
 
 # Set up logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - [%(threadName)s] - %(message)s')
 logger = logging.getLogger(__name__)
+
+# Number of threads (adjust based on system and database limits)
+MAX_WORKERS = 20
 
 
 def get_db_connection():
@@ -21,7 +27,6 @@ def get_db_connection():
             user=os.getenv("POSTGRES_USER"),
             password=os.getenv("POSTGRES_PASSWORD")
         )
-        logger.info("Successfully connected to PostgreSQL database")
         return conn
     except Exception as e:
         logger.error(f"Failed to connect to PostgreSQL: {e}")
@@ -100,17 +105,21 @@ def fetch_wandb_runs(group_id, entity, project):
             path=f"{entity}/{project}",
             filters=filters
         )
-        logger.info(f"Fetched {len(runs)} runs for project {entity}/{project}" + (
+        run_list = list(runs)  # Convert iterator to list for parallel processing
+        logger.info(f"Fetched {len(run_list)} runs for project {entity}/{project}" + (
             f" with group ID {group_id}" if group_id else ""))
-        return runs
+        return run_list
     except Exception as e:
         logger.error(f"Failed to fetch runs from W&B: {e}")
         raise
 
 
-def store_run_data(conn, run):
+def store_run_data(run, conn_params):
     """Store run metadata, config, summary, and history in PostgreSQL."""
+    thread_name = threading.current_thread().name
     try:
+        # Create a new connection for this thread
+        conn = psycopg2.connect(**conn_params)
         with conn.cursor() as cur:
             # Insert run metadata
             cur.execute("""
@@ -150,7 +159,7 @@ def store_run_data(conn, run):
                 ))
 
             # Fetch and insert history
-            history_df = run.history(samples=1_000_000)
+            history_df = run.history()  # samples=100_000
             for index, row in history_df.iterrows():
                 metrics = {k: v for k, v in row.items() if pd.notna(v)}
                 timestamp = row.get('_timestamp', None)
@@ -182,11 +191,26 @@ def store_run_data(conn, run):
                     ))
 
             conn.commit()
-        logger.info(f"Stored data for run {run.id}")
+        logger.info(f"[{thread_name}] Stored data for run {run.id}")
     except Exception as e:
-        logger.error(f"Failed to store data for run {run.id}: {e}")
-        conn.rollback()
+        logger.error(f"[{thread_name}] Failed to store data for run {run.id}: {e}")
+        if 'conn' in locals():
+            conn.rollback()
         raise
+    finally:
+        if 'conn' in locals():
+            conn.close()
+
+
+def process_runs(runs, conn_params):
+    """Process runs in parallel using ThreadPoolExecutor."""
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS, thread_name_prefix="Worker") as executor:
+        futures = [executor.submit(store_run_data, run, conn_params) for run in runs]
+        for future in as_completed(futures):
+            try:
+                future.result()  # Raise any exceptions from the thread
+            except Exception as e:
+                logger.error(f"Thread failed: {e}")
 
 
 def main(group_id, entity, project):
@@ -195,25 +219,31 @@ def main(group_id, entity, project):
     if not os.getenv("WANDB_API_KEY"):
         raise ValueError("WANDB_API_KEY environment variable not set")
 
-    # Get database connection
+    # Get database connection for table creation
     conn = get_db_connection()
     try:
         # Create tables
         create_tables(conn)
 
+        # Prepare connection parameters for threads
+        conn_params = {
+            "host": os.getenv("DB_HOST_OHO"),
+            "port": os.getenv("PGPORT"),
+            "database": os.getenv("POSTGRES_DB_OHO"),
+            "user": os.getenv("POSTGRES_USER"),
+            "password": os.getenv("POSTGRES_PASSWORD")
+        }
         # Fetch runs
         runs = fetch_wandb_runs(group_id, entity, project)
 
-        # Store data for each run
-        for run in runs:
-            store_run_data(conn, run)
+        # Process runs in parallel
+        logger.info(f"Starting parallel processing with {MAX_WORKERS} workers")
+        process_runs(runs, conn_params)
 
         logger.info("Data transfer completed successfully")
-    except Exception as e:
-        print(e)
     finally:
         conn.close()
-        logger.info("Database connection closed")
+        logger.info("Main database connection closed")
 
 
 if __name__ == "__main__":
@@ -230,4 +260,3 @@ if __name__ == "__main__":
     except Exception as e:
         logger.error(f"Script failed: {e}")
         sys.exit(1)
-
