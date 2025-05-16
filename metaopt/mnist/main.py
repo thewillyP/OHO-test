@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 import random
 import os, time
-from typing import Union
+from typing import Union, Literal
 
 import torch
 import torch.optim as optim
@@ -27,9 +27,10 @@ TEST = 2
 
 @dataclass
 class Config:
+    meta_optimizer: str = "sgd"
     use_64: int = 0
     hv_r: float = 1e-3
-    dataset: str = Union["mnist", "fashionmnist"]
+    dataset: Literal["mnist", "fashionmnist"] = "mnist"
     project: str = "new_metaopt"
     test_freq: int = 10
     rng: int = 0
@@ -121,16 +122,49 @@ class VanillaRNNModel(nn.Module):
         self.dFdl2_norm = torch.norm(self.dFdl2)
         self.dFdl2.data = self.dFdl2.data * (1 - 2 * self.lambda_l2 * self.eta) - self.Hl2 - 2 * self.eta * param
 
-    def update_eta(self, mlr, val_grad):
-        delta = val_grad.dot(self.dFdlr).data.cpu().numpy()
-        self.eta -= mlr * delta
-        self.eta = max(0.0, self.eta)
+    # def update_eta(self, mlr, val_grad):
+    #     delta = val_grad.dot(self.dFdlr).data.cpu().numpy()
+    #     self.eta -= mlr * delta
+    #     self.eta = max(0.0, self.eta)
+    #
+    # def update_lambda(self, mlr, val_grad):
+    #     delta = val_grad.dot(self.dFdl2).data.cpu().numpy()
+    #     self.lambda_l2 -= mlr * delta
+    #     self.lambda_l2 = np.maximum(0, self.lambda_l2)
+    #     # self.lambda_l2 = np.clip(self.lambda_l2, 0, 0.0002)
 
-    def update_lambda(self, mlr, val_grad):
-        delta = val_grad.dot(self.dFdl2).data.cpu().numpy()
-        self.lambda_l2 -= mlr * delta
-        self.lambda_l2 = np.maximum(0, self.lambda_l2)
-        # self.lambda_l2 = np.clip(self.lambda_l2, 0, 0.0002)
+    def update_hyperparams(self, delta_eta, delta_lambda, mlr=1e-3, method='adam', beta1=0.9, beta2=0.999, eps=1e-8):
+        if not hasattr(self, 't'):  # Time step
+            self.t = 0
+            self.m_eta = 0
+            self.v_eta = 0
+            self.m_lambda = 0
+            self.v_lambda = 0
+
+        self.t += 1  # increment step
+
+        if method == 'sgd':
+            self.eta -= mlr * delta_eta
+            self.lambda_l2 -= mlr * delta_lambda
+
+        elif method == 'adam':
+            # ETA
+            self.m_eta = beta1 * self.m_eta + (1 - beta1) * delta_eta
+            self.v_eta = beta2 * self.v_eta + (1 - beta2) * (delta_eta ** 2)
+            m_hat_eta = self.m_eta / (1 - beta1 ** self.t)
+            v_hat_eta = self.v_eta / (1 - beta2 ** self.t)
+            self.eta -= mlr * m_hat_eta / (np.sqrt(v_hat_eta) + eps)
+
+            # LAMBDA
+            self.m_lambda = beta1 * self.m_lambda + (1 - beta1) * delta_lambda
+            self.v_lambda = beta2 * self.v_lambda + (1 - beta2) * (delta_lambda ** 2)
+            m_hat_lambda = self.m_lambda / (1 - beta1 ** self.t)
+            v_hat_lambda = self.v_lambda / (1 - beta2 ** self.t)
+            self.lambda_l2 -= mlr * m_hat_lambda / (np.sqrt(v_hat_lambda) + eps)
+
+        # Clamp to valid ranges
+        self.eta = max(0.0, self.eta)
+        self.lambda_l2 = max(0.0, self.lambda_l2)
 
 
 class RNNModel(nn.Module):
@@ -199,16 +233,49 @@ class RNNModel(nn.Module):
         self.dFdl2_norm = torch.norm(self.dFdl2)
         self.dFdl2.data = self.dFdl2.data * (1 - 2 * self.lambda_l2 * self.eta) - self.Hl2 - 2 * self.eta * param
 
-    def update_eta(self, mlr, val_grad):
-        delta = val_grad.dot(self.dFdlr).data.cpu().numpy()
-        self.eta -= mlr * delta
-        self.eta = max(0.0, self.eta)
+    # def update_eta(self, mlr, val_grad):
+    #     delta = val_grad.dot(self.dFdlr).data.cpu().numpy()
+    #     self.eta -= mlr * delta
+    #     self.eta = max(0.0, self.eta)
+    #
+    # def update_lambda(self, mlr, val_grad):
+    #     delta = val_grad.dot(self.dFdl2).data.cpu().numpy()
+    #     self.lambda_l2 -= mlr * delta
+    #     self.lambda_l2 = np.maximum(0, self.lambda_l2)
+    #     # self.lambda_l2 = np.clip(self.lambda_l2, 0, 0.0002)
 
-    def update_lambda(self, mlr, val_grad):
-        delta = val_grad.dot(self.dFdl2).data.cpu().numpy()
-        self.lambda_l2 -= mlr * delta
-        self.lambda_l2 = np.maximum(0, self.lambda_l2)
-        # self.lambda_l2 = np.clip(self.lambda_l2, 0, 0.0002)
+    def update_hyperparams(self, delta_eta, delta_lambda, mlr=1e-3, method='adam', beta1=0.9, beta2=0.999, eps=1e-8):
+        if not hasattr(self, 't'):  # Time step
+            self.t = 0
+            self.m_eta = 0
+            self.v_eta = 0
+            self.m_lambda = 0
+            self.v_lambda = 0
+
+        self.t += 1  # increment step
+
+        if method == 'sgd':
+            self.eta -= mlr * delta_eta
+            self.lambda_l2 -= mlr * delta_lambda
+
+        elif method == 'adam':
+            # ETA
+            self.m_eta = beta1 * self.m_eta + (1 - beta1) * delta_eta
+            self.v_eta = beta2 * self.v_eta + (1 - beta2) * (delta_eta ** 2)
+            m_hat_eta = self.m_eta / (1 - beta1 ** self.t)
+            v_hat_eta = self.v_eta / (1 - beta2 ** self.t)
+            self.eta -= mlr * m_hat_eta / (np.sqrt(v_hat_eta) + eps)
+
+            # LAMBDA
+            self.m_lambda = beta1 * self.m_lambda + (1 - beta1) * delta_lambda
+            self.v_lambda = beta2 * self.v_lambda + (1 - beta2) * (delta_lambda ** 2)
+            m_hat_lambda = self.m_lambda / (1 - beta1 ** self.t)
+            v_hat_lambda = self.v_lambda / (1 - beta2 ** self.t)
+            self.lambda_l2 -= mlr * m_hat_lambda / (np.sqrt(v_hat_lambda) + eps)
+
+        # Clamp to valid ranges
+        self.eta = max(0.0, self.eta)
+        self.lambda_l2 = max(0.0, self.lambda_l2)
 
 
 def save_object_as_wandb_artifact(obj, artifact_name: str, fdir: str, filename: str, artifact_type: str) -> None:
@@ -506,9 +573,17 @@ def meta_update(args: Config, data_vl, target_vl, data_tr, target_tr, model, opt
 
     # Update hyper-parameters
     model.update_dFdlr(Hv_lr, param, grad)
-    model.update_eta(args.mlr, grad_valid)
     model.update_dFdlambda_l2(Hv_l2, param)
-    model.update_lambda(args.mlr, grad_valid)
+
+    # model.update_eta(args.mlr, grad_valid)
+    # model.update_lambda(args.mlr, grad_valid)
+
+    delta_eta = grad_valid.dot(model.dFdlr).item()
+    delta_lambda = grad_valid.dot(model.dFdl2).item()
+    model.update_hyperparams(delta_eta, delta_lambda, mlr=args.mlr, method=args.meta_optimizer)
+
+    # model.update_hyperparams(delta_eta, delta_lambda, mlr=1e-3, method='adam')
+
     # Update optimizer with new eta
     optimizer = update_optimizer_hyperparams(model, optimizer)
 
