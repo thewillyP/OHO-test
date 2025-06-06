@@ -42,7 +42,7 @@ parameters:
     value: 1.e-5
 
   opt_type:
-    value: "sgd"
+    value: "adam"
 
   update_freq:
     value: 1

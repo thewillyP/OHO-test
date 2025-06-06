@@ -113,10 +113,10 @@ class VanillaRNNModel(nn.Module):
         lambd = F.softplus(torch.tensor(self.lambda_l2))
         sigmoid_alpha = torch.sigmoid(torch.tensor(self.eta))
 
-        grad_term = grad + 2 * lambd * param
-        self.Hlr_norm = norm(alpha * Hv)
-        self.dFdlr_norm = norm(self.dFdlr)
-        self.dFdlr.data = self.dFdlr.data * (1 - 2 * lambd * alpha) - alpha * Hv - grad_term * sigmoid_alpha
+        grad_term = grad + lambd * param
+        self.Hlr_norm = torch.norm(alpha * Hv)
+        self.dFdlr_norm = torch.norm(self.dFdlr)
+        self.dFdlr.data = self.dFdlr.data * (1 - lambd * alpha) - alpha * Hv - grad_term * sigmoid_alpha
 
     def update_dFdlambda_l2(self, Hv, param):
         alpha = F.softplus(torch.tensor(self.eta))
@@ -128,7 +128,7 @@ class VanillaRNNModel(nn.Module):
         self.dFdl2_norm = torch.norm(self.dFdl2)
 
         # Multiply ONLY the last term by sigmoid_lambda
-        self.dFdl2.data = self.dFdl2.data * (1 - 2 * lambd * alpha) - self.Hl2 - (2 * alpha * param) * sigmoid_lambda
+        self.dFdl2.data = self.dFdl2.data * (1 - lambd * alpha) - self.Hl2 - (alpha * param) * sigmoid_lambda
 
     # def update_eta(self, mlr, val_grad):
     #     delta = val_grad.dot(self.dFdlr).data.cpu().numpy()
@@ -228,10 +228,10 @@ class RNNModel(nn.Module):
         lambd = F.softplus(torch.tensor(self.lambda_l2))
         sigmoid_alpha = torch.sigmoid(torch.tensor(self.eta))
 
-        grad_term = grad + 2 * lambd * param
+        grad_term = grad + lambd * param
         self.Hlr_norm = torch.norm(alpha * Hv)
         self.dFdlr_norm = torch.norm(self.dFdlr)
-        self.dFdlr.data = self.dFdlr.data * (1 - 2 * lambd * alpha) - alpha * Hv - grad_term * sigmoid_alpha
+        self.dFdlr.data = self.dFdlr.data * (1 - lambd * alpha) - alpha * Hv - grad_term * sigmoid_alpha
 
     def update_dFdlambda_l2(self, Hv, param):
         alpha = F.softplus(torch.tensor(self.eta))
@@ -243,7 +243,7 @@ class RNNModel(nn.Module):
         self.dFdl2_norm = torch.norm(self.dFdl2)
 
         # Multiply ONLY the last term by sigmoid_lambda
-        self.dFdl2.data = self.dFdl2.data * (1 - 2 * lambd * alpha) - self.Hl2 - (2 * alpha * param) * sigmoid_lambda
+        self.dFdl2.data = self.dFdl2.data * (1 - lambd * alpha) - self.Hl2 - (alpha * param) * sigmoid_lambda
 
     # def update_eta(self, mlr, val_grad):
     #     delta = val_grad.dot(self.dFdlr).data.cpu().numpy()
