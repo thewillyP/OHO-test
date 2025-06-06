@@ -161,22 +161,40 @@ class MLP(nn.Module):
         else:
             return F.softmax(x, dim=1)
 
-    def update_dFdlr(self, Hv, param, grad):
+    # def update_dFdlr(self, Hv, param, grad):
+    #
+    #     # grad = flatten_array([p.grad.data.numpy() for p in self.parameters()])
+    #     # tmp = np.ones(self.n_params) * 0.01
+    #     self.Hlr = self.eta * Hv
+    #     self.Hlr_norm = norm(self.Hlr)
+    #     self.dFdlr_norm = norm(self.dFdlr)
+    #     self.dFdlr.data = self.dFdlr.data * (1 - 2 * self.lambda_l2 * self.eta) - self.Hlr - grad - 2 * self.lambda_l2 * param
 
-        # grad = flatten_array([p.grad.data.numpy() for p in self.parameters()])
-        # tmp = np.ones(self.n_params) * 0.01
-        self.Hlr = self.eta * Hv
-        self.Hlr_norm = norm(self.Hlr)
+    def update_dFdlr(self, Hv, param, grad):
+        alpha = F.softplus(torch.tensor(self.eta))
+        lambd = F.softplus(torch.tensor(self.lambda_l2))
+        sigmoid_alpha = torch.sigmoid(torch.tensor(self.eta))
+
+        grad_term = grad + 2 * lambd * param
+        self.Hlr_norm = norm(alpha * Hv)
         self.dFdlr_norm = norm(self.dFdlr)
-        self.dFdlr.data = self.dFdlr.data * (1 - 2 * self.lambda_l2 * self.eta) \
-                          - self.Hlr - grad - 2 * self.lambda_l2 * param
+        self.dFdlr.data = self.dFdlr.data * (1 - 2 * lambd * alpha) \
+                          - alpha * Hv \
+                          - grad_term * sigmoid_alpha
 
     def update_dFdlambda_l2(self, Hv, param):
-        self.Hl2 = self.eta * Hv
-        self.Hl2_norm = norm(self.Hl2)
-        self.dFdl2_norm = norm(self.dFdl2)
-        self.dFdl2.data = self.dFdl2.data * (1 - 2 * self.lambda_l2 * self.eta) \
-                          - self.Hl2 - 2 * self.eta * param
+        alpha = F.softplus(torch.tensor(self.eta))
+        lambd = F.softplus(torch.tensor(self.lambda_l2))
+        sigmoid_lambda = torch.sigmoid(torch.tensor(self.lambda_l2))
+
+        self.Hl2 = alpha * Hv
+        self.Hl2_norm = torch.norm(self.Hl2)
+        self.dFdl2_norm = torch.norm(self.dFdl2)
+
+        # Multiply ONLY the last term by sigmoid_lambda
+        self.dFdl2.data = self.dFdl2.data * (1 - 2 * lambd * alpha) \
+                          - self.Hl2 \
+                          - (2 * alpha * param) * sigmoid_lambda
 
     # def update_eta(self, mlr, val_grad):
     #     delta = val_grad.dot(self.dFdlr).data.cpu().numpy()
@@ -218,9 +236,6 @@ class MLP(nn.Module):
             v_hat_lambda = self.v_lambda / (1 - beta2 ** self.t)
             self.lambda_l2 -= mlr * m_hat_lambda / (np.sqrt(v_hat_lambda) + eps)
 
-        # Clamp to valid ranges
-        self.eta = max(0.0, self.eta)
-        self.lambda_l2 = max(0.0, self.lambda_l2)
 
 
 class AMLP(MLP):

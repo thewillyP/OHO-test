@@ -1,5 +1,5 @@
 program: /OHO-test/metaopt/mnist/main.py
-name: oho_mlp_fixed
+name: oho_mlp_fixed_with_grad_rerun
 method: grid
 version: 1.0.0
 metric:
@@ -30,10 +30,12 @@ parameters:
     values: [0.0]
 
   lr:
-    values: [0.6, 0.29475948, 0.14480525, 0.07113787, 0.0349476, 0.01716856, 0.00843433, 0.0041435, 0.00203556, 0.001]
+    values: [0.0349476]
+
+    # values: [0.6, 0.29475948, 0.14480525, 0.07113787, 0.0349476, 0.01716856, 0.00843433, 0.0041435, 0.00203556, 0.001]
 
   lambda_l2:
-    value: 2.e-4
+    value: 0.0
 
   opt_type:
     value: "sgd"

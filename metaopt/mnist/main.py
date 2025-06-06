@@ -27,7 +27,7 @@ TEST = 2
 
 @dataclass
 class Config:
-    meta_optimizer: str = "sgd"
+    meta_optimizer: Literal["sgd", "adam"] = "sgd"
     use_64: int = 0
     hv_r: float = 1e-3
     dataset: Literal["mnist", "fashionmnist"] = "mnist"
@@ -109,18 +109,26 @@ class VanillaRNNModel(nn.Module):
         return F.log_softmax(out, dim=1) if logsoftmaxF else F.softmax(out, dim=1)
 
     def update_dFdlr(self, Hv, param, grad):
-        self.Hlr = self.eta * Hv
-        self.Hlr_norm = torch.norm(self.Hlr)
-        self.dFdlr_norm = torch.norm(self.dFdlr)
-        self.dFdlr.data = (
-                self.dFdlr.data * (1 - 2 * self.lambda_l2 * self.eta) - self.Hlr - grad - 2 * self.lambda_l2 * param
-        )
+        alpha = F.softplus(torch.tensor(self.eta))
+        lambd = F.softplus(torch.tensor(self.lambda_l2))
+        sigmoid_alpha = torch.sigmoid(torch.tensor(self.eta))
+
+        grad_term = grad + 2 * lambd * param
+        self.Hlr_norm = norm(alpha * Hv)
+        self.dFdlr_norm = norm(self.dFdlr)
+        self.dFdlr.data = self.dFdlr.data * (1 - 2 * lambd * alpha) - alpha * Hv - grad_term * sigmoid_alpha
 
     def update_dFdlambda_l2(self, Hv, param):
-        self.Hl2 = self.eta * Hv
+        alpha = F.softplus(torch.tensor(self.eta))
+        lambd = F.softplus(torch.tensor(self.lambda_l2))
+        sigmoid_lambda = torch.sigmoid(torch.tensor(self.lambda_l2))
+
+        self.Hl2 = alpha * Hv
         self.Hl2_norm = torch.norm(self.Hl2)
         self.dFdl2_norm = torch.norm(self.dFdl2)
-        self.dFdl2.data = self.dFdl2.data * (1 - 2 * self.lambda_l2 * self.eta) - self.Hl2 - 2 * self.eta * param
+
+        # Multiply ONLY the last term by sigmoid_lambda
+        self.dFdl2.data = self.dFdl2.data * (1 - 2 * lambd * alpha) - self.Hl2 - (2 * alpha * param) * sigmoid_lambda
 
     # def update_eta(self, mlr, val_grad):
     #     delta = val_grad.dot(self.dFdlr).data.cpu().numpy()
@@ -133,8 +141,8 @@ class VanillaRNNModel(nn.Module):
     #     self.lambda_l2 = np.maximum(0, self.lambda_l2)
     #     # self.lambda_l2 = np.clip(self.lambda_l2, 0, 0.0002)
 
-    def update_hyperparams(self, delta_eta, delta_lambda, mlr=1e-3, method='adam', beta1=0.9, beta2=0.999, eps=1e-8):
-        if not hasattr(self, 't'):  # Time step
+    def update_hyperparams(self, delta_eta, delta_lambda, mlr=1e-3, method="adam", beta1=0.9, beta2=0.999, eps=1e-8):
+        if not hasattr(self, "t"):  # Time step
             self.t = 0
             self.m_eta = 0
             self.v_eta = 0
@@ -143,28 +151,24 @@ class VanillaRNNModel(nn.Module):
 
         self.t += 1  # increment step
 
-        if method == 'sgd':
+        if method == "sgd":
             self.eta -= mlr * delta_eta
             self.lambda_l2 -= mlr * delta_lambda
 
-        elif method == 'adam':
+        elif method == "adam":
             # ETA
             self.m_eta = beta1 * self.m_eta + (1 - beta1) * delta_eta
-            self.v_eta = beta2 * self.v_eta + (1 - beta2) * (delta_eta ** 2)
-            m_hat_eta = self.m_eta / (1 - beta1 ** self.t)
-            v_hat_eta = self.v_eta / (1 - beta2 ** self.t)
+            self.v_eta = beta2 * self.v_eta + (1 - beta2) * (delta_eta**2)
+            m_hat_eta = self.m_eta / (1 - beta1**self.t)
+            v_hat_eta = self.v_eta / (1 - beta2**self.t)
             self.eta -= mlr * m_hat_eta / (np.sqrt(v_hat_eta) + eps)
 
             # LAMBDA
             self.m_lambda = beta1 * self.m_lambda + (1 - beta1) * delta_lambda
-            self.v_lambda = beta2 * self.v_lambda + (1 - beta2) * (delta_lambda ** 2)
-            m_hat_lambda = self.m_lambda / (1 - beta1 ** self.t)
-            v_hat_lambda = self.v_lambda / (1 - beta2 ** self.t)
+            self.v_lambda = beta2 * self.v_lambda + (1 - beta2) * (delta_lambda**2)
+            m_hat_lambda = self.m_lambda / (1 - beta1**self.t)
+            v_hat_lambda = self.v_lambda / (1 - beta2**self.t)
             self.lambda_l2 -= mlr * m_hat_lambda / (np.sqrt(v_hat_lambda) + eps)
-
-        # Clamp to valid ranges
-        self.eta = max(0.0, self.eta)
-        self.lambda_l2 = max(0.0, self.lambda_l2)
 
 
 class RNNModel(nn.Module):
@@ -220,18 +224,26 @@ class RNNModel(nn.Module):
             return F.softmax(out, dim=1)
 
     def update_dFdlr(self, Hv, param, grad):
-        self.Hlr = self.eta * Hv
-        self.Hlr_norm = torch.norm(self.Hlr)
+        alpha = F.softplus(torch.tensor(self.eta))
+        lambd = F.softplus(torch.tensor(self.lambda_l2))
+        sigmoid_alpha = torch.sigmoid(torch.tensor(self.eta))
+
+        grad_term = grad + 2 * lambd * param
+        self.Hlr_norm = torch.norm(alpha * Hv)
         self.dFdlr_norm = torch.norm(self.dFdlr)
-        self.dFdlr.data = (
-                self.dFdlr.data * (1 - 2 * self.lambda_l2 * self.eta) - self.Hlr - grad - 2 * self.lambda_l2 * param
-        )
+        self.dFdlr.data = self.dFdlr.data * (1 - 2 * lambd * alpha) - alpha * Hv - grad_term * sigmoid_alpha
 
     def update_dFdlambda_l2(self, Hv, param):
-        self.Hl2 = self.eta * Hv
+        alpha = F.softplus(torch.tensor(self.eta))
+        lambd = F.softplus(torch.tensor(self.lambda_l2))
+        sigmoid_lambda = torch.sigmoid(torch.tensor(self.lambda_l2))
+
+        self.Hl2 = alpha * Hv
         self.Hl2_norm = torch.norm(self.Hl2)
         self.dFdl2_norm = torch.norm(self.dFdl2)
-        self.dFdl2.data = self.dFdl2.data * (1 - 2 * self.lambda_l2 * self.eta) - self.Hl2 - 2 * self.eta * param
+
+        # Multiply ONLY the last term by sigmoid_lambda
+        self.dFdl2.data = self.dFdl2.data * (1 - 2 * lambd * alpha) - self.Hl2 - (2 * alpha * param) * sigmoid_lambda
 
     # def update_eta(self, mlr, val_grad):
     #     delta = val_grad.dot(self.dFdlr).data.cpu().numpy()
@@ -244,8 +256,8 @@ class RNNModel(nn.Module):
     #     self.lambda_l2 = np.maximum(0, self.lambda_l2)
     #     # self.lambda_l2 = np.clip(self.lambda_l2, 0, 0.0002)
 
-    def update_hyperparams(self, delta_eta, delta_lambda, mlr=1e-3, method='adam', beta1=0.9, beta2=0.999, eps=1e-8):
-        if not hasattr(self, 't'):  # Time step
+    def update_hyperparams(self, delta_eta, delta_lambda, mlr=1e-3, method="adam", beta1=0.9, beta2=0.999, eps=1e-8):
+        if not hasattr(self, "t"):  # Time step
             self.t = 0
             self.m_eta = 0
             self.v_eta = 0
@@ -254,28 +266,24 @@ class RNNModel(nn.Module):
 
         self.t += 1  # increment step
 
-        if method == 'sgd':
+        if method == "sgd":
             self.eta -= mlr * delta_eta
             self.lambda_l2 -= mlr * delta_lambda
 
-        elif method == 'adam':
+        elif method == "adam":
             # ETA
             self.m_eta = beta1 * self.m_eta + (1 - beta1) * delta_eta
-            self.v_eta = beta2 * self.v_eta + (1 - beta2) * (delta_eta ** 2)
-            m_hat_eta = self.m_eta / (1 - beta1 ** self.t)
-            v_hat_eta = self.v_eta / (1 - beta2 ** self.t)
+            self.v_eta = beta2 * self.v_eta + (1 - beta2) * (delta_eta**2)
+            m_hat_eta = self.m_eta / (1 - beta1**self.t)
+            v_hat_eta = self.v_eta / (1 - beta2**self.t)
             self.eta -= mlr * m_hat_eta / (np.sqrt(v_hat_eta) + eps)
 
             # LAMBDA
             self.m_lambda = beta1 * self.m_lambda + (1 - beta1) * delta_lambda
-            self.v_lambda = beta2 * self.v_lambda + (1 - beta2) * (delta_lambda ** 2)
-            m_hat_lambda = self.m_lambda / (1 - beta1 ** self.t)
-            v_hat_lambda = self.v_lambda / (1 - beta2 ** self.t)
+            self.v_lambda = beta2 * self.v_lambda + (1 - beta2) * (delta_lambda**2)
+            m_hat_lambda = self.m_lambda / (1 - beta1**self.t)
+            v_hat_lambda = self.v_lambda / (1 - beta2**self.t)
             self.lambda_l2 -= mlr * m_hat_lambda / (np.sqrt(v_hat_lambda) + eps)
-
-        # Clamp to valid ranges
-        self.eta = max(0.0, self.eta)
-        self.lambda_l2 = max(0.0, self.lambda_l2)
 
 
 def save_object_as_wandb_artifact(obj, artifact_name: str, fdir: str, filename: str, artifact_type: str) -> None:
@@ -290,7 +298,7 @@ def save_object_as_wandb_artifact(obj, artifact_name: str, fdir: str, filename: 
 
 
 def seed_worker(worker_id):
-    worker_seed = torch.initial_seed() % 2 ** 32
+    worker_seed = torch.initial_seed() % 2**32
     np.random.seed(worker_seed)
     random.seed(worker_seed)
 
@@ -303,8 +311,7 @@ def load_dataset(args, dataset_fn):
         transform=transforms.Compose([transforms.ToTensor()]),
     )
     dataset = dataset_fn(
-        f"{args.save_dir}/data/mnist", train=True, download=True,
-        transform=transforms.Compose([transforms.ToTensor()])
+        f"{args.save_dir}/data/mnist", train=True, download=True, transform=transforms.Compose([transforms.ToTensor()])
     )
     train_set, valid_set = torch.utils.data.random_split(dataset, [60000 - args.valid_size, args.valid_size])
 
@@ -332,7 +339,45 @@ def load_dataset(args, dataset_fn):
     return dataset
 
 
+def softplus_inverse(x):
+    """
+    Computes the inverse softplus using numpy:
+    softplus_inverse(x) = log(exp(x) - 1)
+
+    Uses a numerically stable form:
+      softplus_inverse(x) = x + log(1 - exp(-x))
+
+    Args:
+      x: np.ndarray or float, input values (assumed non-negative).
+
+    Returns:
+      np.ndarray or float, same shape as input.
+    """
+    x = np.asarray(x)
+
+    eps = np.finfo(x.dtype).eps
+    threshold = np.log(eps) + 2.0
+
+    is_too_small = x < np.exp(threshold)
+    is_too_large = x > -threshold
+
+    too_small_value = np.log(x)
+    too_large_value = x
+
+    # Safe version of x for computing inverse softplus
+    safe_x = np.where(is_too_small | is_too_large, 1.0, x)
+
+    y = safe_x + np.log1p(-np.exp(-safe_x))  # log(1 - exp(-x)) using log1p for stability
+
+    # Compose the output based on conditions
+    result = np.where(is_too_small, too_small_value, np.where(is_too_large, too_large_value, y))
+    return result
+
+
 def main(args: Config):
+    args.lr = float(softplus_inverse(args.lr))
+    args.lambda_l2 = float(softplus_inverse(args.lambda_l2))
+
     match args.dataset:
         case "mnist":
             dataset = load_dataset(args, datasets.MNIST)
@@ -373,7 +418,9 @@ def main(args: Config):
         case _:
             raise ValueError("Invalid model type. Choose 'mlp', 'rnn', or 'lstm'.")
 
-    optimizer = optim.SGD(model.parameters(), lr=args.lr, weight_decay=args.lambda_l2)
+    optimizer = optim.SGD(
+        model.parameters(), lr=F.softplus(torch.tensor(args.lr)), weight_decay=F.softplus(torch.tensor(args.lambda_l2))
+    )
 
     print(
         "Model Type: %s Opt Type: %s Update Freq %d Reset Freq %d"
@@ -448,8 +495,8 @@ def train(args: Config, dataset, model, optimizer, fdir):
                     "train_accuracy": accuracy,
                     "valid_loss": loss_vl,
                     "valid_epoch": counter,
-                    "learning_rate": model.eta,
-                    "weight_decay": model.lambda_l2,
+                    "learning_rate": F.softplus(torch.tensor(model.eta)).item(),
+                    "weight_decay": F.softplus(torch.tensor(model.lambda_l2)).item(),
                     "dFdlr_norm": model.dFdlr_norm,
                     "dFdl2_norm": model.dFdl2_norm,
                     "grad_norm": model.grad_norm,
@@ -497,8 +544,8 @@ def train(args: Config, dataset, model, optimizer, fdir):
                 np.mean(tr_loss_list[-100:]),
                 np.mean(vl_loss_list[-100:]),
                 np.mean(tr_acc_list[-100:]),
-                str(model.eta),
-                str(model.lambda_l2),
+                str(F.softplus(torch.tensor(model.eta)).item()),
+                str(F.softplus(torch.tensor(model.lambda_l2)).item()),
                 model.dFdlr_norm,
                 model.dFdl2_norm,
                 model.grad_norm,
@@ -528,6 +575,11 @@ def feval(data, target, model):
     model.train()
     loss, accuracy = evaluate(data, target, model)
     loss.backward()
+
+    grad = flatten([p.grad.data for p in model.parameters()])
+    param = flatten(model.parameters())
+    model.grad_norm = torch.linalg.norm(grad).item()
+    model.param_norm = torch.linalg.norm(param).item()
 
     return model, loss.item(), accuracy
 
@@ -565,10 +617,9 @@ def meta_update(args: Config, data_vl, target_vl, data_tr, target_tr, model, opt
     model.grad_norm_vl = torch.linalg.norm(grad_valid).item()
 
     # Compute angle between tr and vl grad
+
     grad = flatten([p.grad.data for p in model.parameters()])
     param = flatten(model.parameters())
-    model.grad_norm = torch.linalg.norm(grad).item()
-    model.param_norm = torch.linalg.norm(param).item()
     model.grad_angle = torch.dot(grad / model.grad_norm, grad_valid / model.grad_norm_vl).item()
 
     # Update hyper-parameters
@@ -591,8 +642,8 @@ def meta_update(args: Config, data_vl, target_vl, data_tr, target_tr, model, opt
 
 
 def update_optimizer_hyperparams(model, optimizer):
-    optimizer.param_groups[0]["lr"] = np.copy(model.eta)
-    optimizer.param_groups[0]["weight_decay"] = model.lambda_l2
+    optimizer.param_groups[0]["lr"] = np.copy(F.softplus(torch.tensor(model.eta)))
+    optimizer.param_groups[0]["weight_decay"] = F.softplus(torch.tensor(model.lambda_l2))
 
     return optimizer
 
