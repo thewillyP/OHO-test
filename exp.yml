@@ -1,5 +1,5 @@
 program: /OHO-test/metaopt/mnist/main.py
-name: oho_rnn_lre3
+name: oho_lstm
 method: grid
 version: 1.0.0
 metric:
@@ -7,6 +7,9 @@ metric:
   goal: minimize
 
 parameters:
+
+  soft_relu_clip:
+    value: 1000
 
   meta_optimizer:
     value: "sgd"
@@ -36,13 +39,13 @@ parameters:
     values: [1.e-5]
 
   lr:
-    value: 0.001
+    value: 0.1
 
   lambda_l2:
-    value: 1.e-5
+    value: 1.e-4
 
   opt_type:
-    value: "adam"
+    value: "sgd"
 
   update_freq:
     value: 1
@@ -51,19 +54,19 @@ parameters:
     value: 1
 
   model_type:
-    value: "mlp"
+    value: "lstm"
 
   xdim:
-    value: 784
+    value: 28
 
   num_epoch:
     value: 100
 
   batch_size:
-    value: 1000
+    value: 2000
 
   batch_size_vl:
-    value: 1000
+    value: 2000
 
   save_dir:
     value: "/wandb_data"

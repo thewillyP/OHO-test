@@ -7,9 +7,15 @@ import torch.optim as optim
 from torchvision import datasets, transforms
 from copy import copy
 import numpy as np
+
 from metaopt.util_ml import *
 from metaopt.util import *
 
+def softrelu(x, c):
+    def softminus(x):
+        return -F.softplus(-x)
+    v = x - softminus(c*x) / c
+    return v
 
 class MLP_Drop(nn.Module):
 
@@ -105,6 +111,7 @@ class MLP_Drop(nn.Module):
         self.lambda_l2 = np.minimum(0.0001, self.lambda_l2)
 
 
+
 class MLP(nn.Module):
 
     def __init__(self, n_layers, layer_sizes, lr_init, lambda_l2, is_cuda=0):
@@ -170,10 +177,10 @@ class MLP(nn.Module):
     #     self.dFdlr_norm = norm(self.dFdlr)
     #     self.dFdlr.data = self.dFdlr.data * (1 - 2 * self.lambda_l2 * self.eta) - self.Hlr - grad - 2 * self.lambda_l2 * param
 
-    def update_dFdlr(self, Hv, param, grad):
-        alpha = F.softplus(torch.tensor(self.eta))
-        lambd = F.softplus(torch.tensor(self.lambda_l2))
-        sigmoid_alpha = torch.sigmoid(torch.tensor(self.eta))
+    def update_dFdlr(self, Hv, param, grad, c):
+        alpha = softrelu(torch.tensor(self.eta), c)
+        lambd = softrelu(torch.tensor(self.lambda_l2), c)
+        sigmoid_alpha = torch.sigmoid(c * torch.tensor(self.eta))
 
         grad_term = grad + lambd * param
         self.Hlr_norm = norm(alpha * Hv)
@@ -182,10 +189,10 @@ class MLP(nn.Module):
                           - alpha * Hv \
                           - grad_term * sigmoid_alpha
 
-    def update_dFdlambda_l2(self, Hv, param):
-        alpha = F.softplus(torch.tensor(self.eta))
-        lambd = F.softplus(torch.tensor(self.lambda_l2))
-        sigmoid_lambda = torch.sigmoid(torch.tensor(self.lambda_l2))
+    def update_dFdlambda_l2(self, Hv, param, c):
+        alpha = softrelu(torch.tensor(self.eta), c)
+        lambd = softrelu(torch.tensor(self.lambda_l2), c)
+        sigmoid_lambda = torch.sigmoid(c * torch.tensor(self.lambda_l2))
 
         self.Hl2 = alpha * Hv
         self.Hl2_norm = torch.norm(self.Hl2)
