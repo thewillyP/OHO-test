@@ -1,5 +1,5 @@
 program: /OHO-test/metaopt/mnist/main.py
-name: oho_lstm_fixed
+name: oho_lstm_fixed_adam
 method: grid
 version: 1.0.0
 metric:
@@ -8,11 +8,14 @@ metric:
 
 parameters:
 
+  num_hlayers:
+    value: 1
+
   soft_relu_clip:
     value: 1000
 
   meta_optimizer:
-    value: "sgd"
+    value: "adam"
 
   use_64:
     value: 0
@@ -63,10 +66,10 @@ parameters:
     value: 100
 
   batch_size:
-    value: 2000
+    value: 4000
 
   batch_size_vl:
-    value: 2000
+    value: 4000
 
   save_dir:
     value: "/wandb_data"
