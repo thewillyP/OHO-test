@@ -1,5 +1,5 @@
 program: /OHO-test/metaopt/mnist/main.py
-name: oho_mlp_sgd
+name: oho_rnn_outer_adam
 method: grid
 version: 1.0.0
 metric:
@@ -12,13 +12,13 @@ parameters:
     value: 12000
 
   num_hlayers:
-    value: 3
+    value: 1
 
   soft_relu_clip:
     value: 1000
 
   meta_optimizer:
-    value: "sgd"
+    value: "adam"
 
   use_64:
     value: 0
@@ -27,10 +27,10 @@ parameters:
     values: [1.e-3]
 
   dataset:
-    value: "fashionmnist"
+    value: "mnist"
 
   project:
-    value: "metaopt_fashionmnist_batch1000"
+    value: "adam_rnn_mnist"
 
   test_freq:
     value: 1
@@ -42,13 +42,13 @@ parameters:
     value: 0
 
   mlr:
-    values: [1.e-3]
+    values: [2.e-4]
 
   lr:
-    values: [0.1]
+    values: [0.02]
 
   lambda_l2:
-    value: 1.e-4
+    value: 1.e-6
 
   opt_type:
     value: "sgd"
@@ -60,10 +60,10 @@ parameters:
     value: 1
 
   model_type:
-    value: "mlp"
+    value: "rnn"
 
   xdim:
-    value: 784
+    value: 28
 
   num_epoch:
     value: 100

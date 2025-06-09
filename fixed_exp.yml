@@ -1,5 +1,5 @@
 program: /OHO-test/metaopt/mnist/main.py
-name: oho_lstm_fixed_adam
+name: oho_rnn_outer_adam_fixed
 method: grid
 version: 1.0.0
 metric:
@@ -7,6 +7,9 @@ metric:
   goal: minimize
 
 parameters:
+
+  valid_size:
+    value: 12000
 
   num_hlayers:
     value: 1
@@ -24,10 +27,10 @@ parameters:
     values: [1.e-3]
 
   dataset:
-    value: "fashionmnist"
+    value: "mnist"
 
   project:
-    value: "metaopt_fashionmnist_batch1000"
+    value: "adam_rnn_mnist"
 
   test_freq:
     value: 1
@@ -45,7 +48,7 @@ parameters:
     values: [0.6, 0.29475948, 0.14480525, 0.07113787, 0.0349476, 0.01716856, 0.00843433, 0.0041435, 0.00203556, 0.001]
 
   lambda_l2:
-    value: 1.e-4
+    value: 1.e-6
 
   opt_type:
     value: "sgd"
@@ -57,7 +60,7 @@ parameters:
     value: 1
 
   model_type:
-    value: "lstm"
+    value: "rnn"
 
   xdim:
     value: 28
