@@ -8,6 +8,9 @@ metric:
 
 parameters:
 
+  valid_size:
+    value: 12000
+
   num_hlayers:
     value: 1
 
@@ -39,10 +42,10 @@ parameters:
     value: 0
 
   mlr:
-    values: [1.e-4]
+    values: [1.e-3]
 
   lr:
-    value: 0.6
+    values:[0.6, 0.1]
 
   lambda_l2:
     value: 1.e-4
@@ -57,7 +60,7 @@ parameters:
     value: 1
 
   model_type:
-    value: "lstm"
+    value: "mlp"
 
   xdim:
     value: 28
