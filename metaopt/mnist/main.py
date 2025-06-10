@@ -54,6 +54,9 @@ class Config:
     save: int = 0
     save_dir: str = "/scratch"
     soft_relu_clip: float = 10000
+    vl_grad_clip: float = None
+    tr_grad_clip: float = None
+
 
 
 
@@ -485,9 +488,13 @@ def train(args: Config, dataset, model, optimizer, fdir):
             unupdated = deepcopy(model)
             optimizer.zero_grad()
             model, loss, accuracy = feval(data, target, model)
+            if args.tr_grad_clip is not None:
+                tr_grad = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=args.tr_grad_clip)
+            else:
+                tr_grad = None
             optimizer.step()
 
-            model, optimizer, loss_vl, acc_vl = meta_update(
+            model, optimizer, loss_vl, acc_vl, vl_grad = meta_update(
                 args, data_vl, target_vl, data, target, model, optimizer, unupdated
             )
 
@@ -502,6 +509,8 @@ def train(args: Config, dataset, model, optimizer, fdir):
                     "weight_decay": softrelu(torch.tensor(model.lambda_l2), args.soft_relu_clip).item(),
                     "dFdlr_norm": model.dFdlr_norm,
                     "dFdl2_norm": model.dFdl2_norm,
+                    "unclipped_grad_norm": tr_grad,
+                    "unclipped_grad_norm_vl": vl_grad,
                     "grad_norm": model.grad_norm,
                     "grad_norm_vl": model.grad_norm_vl,
                     "grad_angle": model.grad_angle,
@@ -616,6 +625,11 @@ def meta_update(args: Config, data_vl, target_vl, data_tr, target_tr, model, opt
     val_model = deepcopy(model)
     val_model.train()
     _, loss_valid, acc_valid = feval(data_vl, target_vl, val_model)
+    if args.vl_grad_clip is not None:
+        vl_grad = torch.nn.utils.clip_grad_norm_(val_model.parameters(), max_norm=args.vl_grad_clip)
+    else:
+        vl_grad = None
+
     grad_valid = flatten([p.grad.data for p in val_model.parameters()])
     model.grad_norm_vl = torch.linalg.norm(grad_valid).item()
 
@@ -641,7 +655,7 @@ def meta_update(args: Config, data_vl, target_vl, data_tr, target_tr, model, opt
     # Update optimizer with new eta
     optimizer = update_optimizer_hyperparams(model, optimizer, args)
 
-    return model, optimizer, loss_valid, acc_valid
+    return model, optimizer, loss_valid, acc_valid, vl_grad
 
 
 def update_optimizer_hyperparams(model, optimizer, args):

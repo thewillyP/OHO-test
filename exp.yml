@@ -1,5 +1,5 @@
 program: /OHO-test/metaopt/mnist/main.py
-name: oho_rnn_outer_adam
+name: oho_rnn_outer_adam_1
 method: grid
 version: 1.0.0
 metric:
@@ -42,10 +42,10 @@ parameters:
     value: 0
 
   mlr:
-    values: [2.e-4]
+    values: [1.e-4]
 
   lr:
-    values: [0.02]
+    values: [0.4]
 
   lambda_l2:
     value: 1.e-6
