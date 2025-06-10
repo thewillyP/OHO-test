@@ -487,11 +487,9 @@ def train(args: Config, dataset, model, optimizer, fdir):
 
             unupdated = deepcopy(model)
             optimizer.zero_grad()
-            model, loss, accuracy = feval(data, target, model)
-            if args.tr_grad_clip is not None:
-                tr_grad = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=args.tr_grad_clip)
-            else:
-                tr_grad = None
+            model, loss, accuracy, tr_grad_norm, tr_param_norm, unclip_grad = feval(data, target, model, args.tr_grad_clip)
+            model.grad_norm = tr_grad_norm
+            model.param_norm = tr_param_norm
             optimizer.step()
 
             model, optimizer, loss_vl, acc_vl, vl_grad = meta_update(
@@ -509,7 +507,7 @@ def train(args: Config, dataset, model, optimizer, fdir):
                     "weight_decay": softrelu(torch.tensor(model.lambda_l2), args.soft_relu_clip).item(),
                     "dFdlr_norm": model.dFdlr_norm,
                     "dFdl2_norm": model.dFdl2_norm,
-                    "unclipped_grad_norm": tr_grad,
+                    "unclipped_grad_norm": unclip_grad,
                     "unclipped_grad_norm_vl": vl_grad,
                     "grad_norm": model.grad_norm,
                     "grad_norm_vl": model.grad_norm_vl,
@@ -583,33 +581,38 @@ def flatten(xs):
     return torch.cat([x.detach().flatten() for x in xs])
 
 
-def feval(data, target, model):
+def feval(data, target, model, grad_clip):
     model.train()
     loss, accuracy = evaluate(data, target, model)
     loss.backward()
 
+    if grad_clip is not None:
+        unclipped_grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=grad_clip)
+    else:
+        unclipped_grad_norm = None
+
     grad = flatten([p.grad.data for p in model.parameters()])
     param = flatten(model.parameters())
-    model.grad_norm = torch.linalg.norm(grad).item()
-    model.param_norm = torch.linalg.norm(param).item()
+    grad_norm = torch.linalg.norm(grad).item()
+    param_norm = torch.linalg.norm(param).item()
 
-    return model, loss.item(), accuracy
+    return model, loss.item(), accuracy, grad_norm, param_norm, unclipped_grad_norm
 
 
-def compute_HessianVectorProd(args: Config, dFdS, data, target, unupdated):
+def compute_HessianVectorProd(args: Config, dFdS, data, target, unupdated, clip):
     Hess_est_r = args.hv_r
 
     def perturb(model, vector):
         current_params = parameters_to_vector(model.parameters())
         new_params = current_params + vector.to(current_params.device)
         vector_to_parameters(new_params, model.parameters())
-        return feval(data, target, model)
+        return feval(data, target, model, clip)
 
     model_plus = deepcopy(unupdated)
     model_minus = deepcopy(unupdated)
 
-    model_plus, _, _ = perturb(model_plus, Hess_est_r * dFdS)
-    model_minus, _, _ = perturb(model_minus, -Hess_est_r * dFdS)
+    model_plus, _, _, _, _, _ = perturb(model_plus, Hess_est_r * dFdS)
+    model_minus, _, _, _, _, _ = perturb(model_minus, -Hess_est_r * dFdS)
 
     g_plus = flatten([p.grad.data for p in model_plus.parameters()])
     g_minus = flatten([p.grad.data for p in model_minus.parameters()])
@@ -619,19 +622,13 @@ def compute_HessianVectorProd(args: Config, dFdS, data, target, unupdated):
 
 def meta_update(args: Config, data_vl, target_vl, data_tr, target_tr, model, optimizer, unupdated):
     # Compute Hessian Vector Product
-    Hv_lr = compute_HessianVectorProd(args, model.dFdlr, data_tr, target_tr, unupdated)
-    Hv_l2 = compute_HessianVectorProd(args, model.dFdl2, data_tr, target_tr, unupdated)
+    Hv_lr = compute_HessianVectorProd(args, model.dFdlr, data_tr, target_tr, unupdated, args.tr_grad_clip)
+    Hv_l2 = compute_HessianVectorProd(args, model.dFdl2, data_tr, target_tr, unupdated, args.tr_grad_clip)
 
     val_model = deepcopy(model)
     val_model.train()
-    _, loss_valid, acc_valid = feval(data_vl, target_vl, val_model)
-    if args.vl_grad_clip is not None:
-        vl_grad = torch.nn.utils.clip_grad_norm_(val_model.parameters(), max_norm=args.vl_grad_clip)
-    else:
-        vl_grad = None
-
+    _, loss_valid, acc_valid, model.grad_norm_vl, _, vl_grad = feval(data_vl, target_vl, val_model, args.vl_grad_clip)
     grad_valid = flatten([p.grad.data for p in val_model.parameters()])
-    model.grad_norm_vl = torch.linalg.norm(grad_valid).item()
 
     # Compute angle between tr and vl grad
 

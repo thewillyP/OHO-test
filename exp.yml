@@ -8,6 +8,12 @@ metric:
 
 parameters:
 
+#  tr_grad_clip:
+#    value: 1
+#
+#  vl_grad_clip:
+#    value: 1
+
   valid_size:
     value: 12000
 
@@ -45,7 +51,7 @@ parameters:
     values: [1.e-4]
 
   lr:
-    values: [0.4]
+    values: [0.04]
 
   lambda_l2:
     value: 1.e-6
