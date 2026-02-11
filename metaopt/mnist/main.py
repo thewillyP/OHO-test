@@ -342,6 +342,7 @@ def main(args: Config):
                 lr_init=args.lr,
                 lambda_l2=args.lambda_l2,
                 is_cuda=args.is_cuda,
+                mu=args.mu,
             )
         case "lstm":
             model = RNNModel(
@@ -352,6 +353,7 @@ def main(args: Config):
                 lr_init=args.lr,
                 lambda_l2=args.lambda_l2,
                 is_cuda=args.is_cuda,
+                mu=args.mu,
             )
         case "mlp":
             model = MLP(num_layers, hdims, args.lr, args.lambda_l2, is_cuda=args.is_cuda)
