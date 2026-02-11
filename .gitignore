@@ -13,6 +13,7 @@ __pycache__/
 **/wandb/*
 *.err 
 *.log
+*.pkl
 
 # C extensions
 *.so

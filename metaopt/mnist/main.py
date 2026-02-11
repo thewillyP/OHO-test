@@ -356,7 +356,7 @@ def main(args: Config):
                 mu=args.mu,
             )
         case "mlp":
-            model = MLP(num_layers, hdims, args.lr, args.lambda_l2, is_cuda=args.is_cuda)
+            model = MLP(num_layers, hdims, args.lr, args.lambda_l2, is_cuda=args.is_cuda, mu=args.mu)
         case _:
             raise ValueError("Invalid model type. Choose 'mlp', 'rnn', or 'lstm'.")
 
@@ -598,7 +598,7 @@ def update_optimizer_hyperparams(model, optimizer):
 
 if __name__ == "__main__":
     args = Config(
-        meta_optimizer="sgd",
+        meta_optimizer="adam",
         use_64=0,
         hv_r=1e-3,
         dataset="mnist",
@@ -608,9 +608,9 @@ if __name__ == "__main__":
         num_epoch=100,
         batch_size=1000,
         batch_size_vl=1000,
-        model_type="rnn",
+        model_type="mlp",
         opt_type="sgd",
-        xdim=28,
+        xdim=28 * 28,
         hdim=128,
         ydim=10,
         num_hlayers=1,
@@ -629,7 +629,7 @@ if __name__ == "__main__":
         mu=0.1,
     )
 
-    with wandb.init(mode="offline", config=vars(args), project=args.project):
+    with wandb.init(mode="online", config=vars(args), project=args.project):
         if args.use_64:
             torch.set_default_dtype(torch.float64)
         seed = args.rng
