@@ -16,7 +16,6 @@ from metaopt.mnist.mlp import MLP, softrelu
 from metaopt.util import to_torch_variable
 from metaopt.util_ml import compute_correlation
 from torch.nn.utils import parameters_to_vector, vector_to_parameters
-from sweep_agent.agent import get_sweep_config
 import wandb
 import joblib
 
@@ -56,9 +55,6 @@ class Config:
     soft_relu_clip: float = 10000
     vl_grad_clip: float = None
     tr_grad_clip: float = None
-
-
-
 
 
 class VanillaRNNModel(nn.Module):
@@ -136,40 +132,27 @@ class VanillaRNNModel(nn.Module):
         # Multiply ONLY the last term by sigmoid_lambda
         self.dFdl2.data = self.dFdl2.data * (1 - lambd * alpha) - self.Hl2 - (alpha * param) * sigmoid_lambda
 
-    # def update_eta(self, mlr, val_grad):
-    #     delta = val_grad.dot(self.dFdlr).data.cpu().numpy()
-    #     self.eta -= mlr * delta
-    #     self.eta = max(0.0, self.eta)
-    #
-    # def update_lambda(self, mlr, val_grad):
-    #     delta = val_grad.dot(self.dFdl2).data.cpu().numpy()
-    #     self.lambda_l2 -= mlr * delta
-    #     self.lambda_l2 = np.maximum(0, self.lambda_l2)
-    #     # self.lambda_l2 = np.clip(self.lambda_l2, 0, 0.0002)
-
     def update_hyperparams(self, delta_eta, delta_lambda, mlr=1e-3, method="adam", beta1=0.9, beta2=0.999, eps=1e-8):
-        if not hasattr(self, "t"):  # Time step
+        if not hasattr(self, "t"):
             self.t = 0
             self.m_eta = 0
             self.v_eta = 0
             self.m_lambda = 0
             self.v_lambda = 0
 
-        self.t += 1  # increment step
+        self.t += 1
 
         if method == "sgd":
             self.eta -= mlr * delta_eta
             self.lambda_l2 -= mlr * delta_lambda
 
         elif method == "adam":
-            # ETA
             self.m_eta = beta1 * self.m_eta + (1 - beta1) * delta_eta
             self.v_eta = beta2 * self.v_eta + (1 - beta2) * (delta_eta**2)
             m_hat_eta = self.m_eta / (1 - beta1**self.t)
             v_hat_eta = self.v_eta / (1 - beta2**self.t)
             self.eta -= mlr * m_hat_eta / (np.sqrt(v_hat_eta) + eps)
 
-            # LAMBDA
             self.m_lambda = beta1 * self.m_lambda + (1 - beta1) * delta_lambda
             self.v_lambda = beta2 * self.v_lambda + (1 - beta2) * (delta_lambda**2)
             m_hat_lambda = self.m_lambda / (1 - beta1**self.t)
@@ -187,7 +170,7 @@ class RNNModel(nn.Module):
         self.hidden_size = hidden_size
         self.num_layers = num_layers
         self.output_size = output_size
-        self.eta = lr_init  # For consistency with MLP code
+        self.eta = lr_init
         self.lambda_l2 = lambda_l2
         self.is_cuda = is_cuda
         self.name = "RNN"
@@ -216,13 +199,12 @@ class RNNModel(nn.Module):
             self.dFdl2 = self.dFdl2.cuda()
 
     def forward(self, x, logsoftmaxF=1):
-        # Automatically reshape if input is flat (e.g., B x 784)
         if x.dim() > 2:
-            new_shape = (x.size(0), -1, self.input_size)  # Batch size is fixed, others are flattened
+            new_shape = (x.size(0), -1, self.input_size)
             x = x.view(new_shape)
 
         out, _ = self.lstm(x)
-        out = self.fc(out[:, -1, :])  # Last time step
+        out = self.fc(out[:, -1, :])
 
         if logsoftmaxF:
             return F.log_softmax(out, dim=1)
@@ -248,43 +230,29 @@ class RNNModel(nn.Module):
         self.Hl2_norm = torch.norm(self.Hl2)
         self.dFdl2_norm = torch.norm(self.dFdl2)
 
-        # Multiply ONLY the last term by sigmoid_lambda
         self.dFdl2.data = self.dFdl2.data * (1 - lambd * alpha) - self.Hl2 - (alpha * param) * sigmoid_lambda
 
-    # def update_eta(self, mlr, val_grad):
-    #     delta = val_grad.dot(self.dFdlr).data.cpu().numpy()
-    #     self.eta -= mlr * delta
-    #     self.eta = max(0.0, self.eta)
-    #
-    # def update_lambda(self, mlr, val_grad):
-    #     delta = val_grad.dot(self.dFdl2).data.cpu().numpy()
-    #     self.lambda_l2 -= mlr * delta
-    #     self.lambda_l2 = np.maximum(0, self.lambda_l2)
-    #     # self.lambda_l2 = np.clip(self.lambda_l2, 0, 0.0002)
-
     def update_hyperparams(self, delta_eta, delta_lambda, mlr=1e-3, method="adam", beta1=0.9, beta2=0.999, eps=1e-8):
-        if not hasattr(self, "t"):  # Time step
+        if not hasattr(self, "t"):
             self.t = 0
             self.m_eta = 0
             self.v_eta = 0
             self.m_lambda = 0
             self.v_lambda = 0
 
-        self.t += 1  # increment step
+        self.t += 1
 
         if method == "sgd":
             self.eta -= mlr * delta_eta
             self.lambda_l2 -= mlr * delta_lambda
 
         elif method == "adam":
-            # ETA
             self.m_eta = beta1 * self.m_eta + (1 - beta1) * delta_eta
             self.v_eta = beta2 * self.v_eta + (1 - beta2) * (delta_eta**2)
             m_hat_eta = self.m_eta / (1 - beta1**self.t)
             v_hat_eta = self.v_eta / (1 - beta2**self.t)
             self.eta -= mlr * m_hat_eta / (np.sqrt(v_hat_eta) + eps)
 
-            # LAMBDA
             self.m_lambda = beta1 * self.m_lambda + (1 - beta1) * delta_lambda
             self.v_lambda = beta2 * self.v_lambda + (1 - beta2) * (delta_lambda**2)
             m_hat_lambda = self.m_lambda / (1 - beta1**self.t)
@@ -370,12 +338,10 @@ def softplus_inverse(x):
     too_small_value = np.log(x)
     too_large_value = x
 
-    # Safe version of x for computing inverse softplus
     safe_x = np.where(is_too_small | is_too_large, 1.0, x)
 
-    y = safe_x + np.log1p(-np.exp(-safe_x))  # log(1 - exp(-x)) using log1p for stability
+    y = safe_x + np.log1p(-np.exp(-safe_x))
 
-    # Compose the output based on conditions
     result = np.where(is_too_small, too_small_value, np.where(is_too_large, too_large_value, y))
     return result
 
@@ -425,7 +391,9 @@ def main(args: Config):
             raise ValueError("Invalid model type. Choose 'mlp', 'rnn', or 'lstm'.")
 
     optimizer = optim.SGD(
-        model.parameters(), lr=softrelu(torch.tensor(args.lr), args.soft_relu_clip), weight_decay=softrelu(torch.tensor(args.lambda_l2), args.soft_relu_clip)
+        model.parameters(),
+        lr=softrelu(torch.tensor(args.lr), args.soft_relu_clip),
+        weight_decay=softrelu(torch.tensor(args.lambda_l2), args.soft_relu_clip),
     )
 
     print(
@@ -487,7 +455,9 @@ def train(args: Config, dataset, model, optimizer, fdir):
 
             unupdated = deepcopy(model)
             optimizer.zero_grad()
-            model, loss, accuracy, tr_grad_norm, tr_param_norm, unclip_grad = feval(data, target, model, args.tr_grad_clip)
+            model, loss, accuracy, tr_grad_norm, tr_param_norm, unclip_grad = feval(
+                data, target, model, args.tr_grad_clip
+            )
             model.grad_norm = tr_grad_norm
             model.param_norm = tr_param_norm
             optimizer.step()
@@ -571,7 +541,7 @@ def train(args: Config, dataset, model, optimizer, fdir):
 def evaluate(data, target, model):
     output = model(data)
     loss = F.nll_loss(output, target)
-    pred = output.argmax(dim=1, keepdim=True).flatten()  # get the index of the max log-probability
+    pred = output.argmax(dim=1, keepdim=True).flatten()
     accuracy = pred.eq(target).float().mean()
 
     return loss, accuracy.item()
@@ -640,14 +610,9 @@ def meta_update(args: Config, data_vl, target_vl, data_tr, target_tr, model, opt
     model.update_dFdlr(Hv_lr, param, grad, args.soft_relu_clip)
     model.update_dFdlambda_l2(Hv_l2, param, args.soft_relu_clip)
 
-    # model.update_eta(args.mlr, grad_valid)
-    # model.update_lambda(args.mlr, grad_valid)
-
     delta_eta = grad_valid.dot(model.dFdlr).item()
     delta_lambda = grad_valid.dot(model.dFdl2).item()
     model.update_hyperparams(delta_eta, delta_lambda, mlr=args.mlr, method=args.meta_optimizer)
-
-    # model.update_hyperparams(delta_eta, delta_lambda, mlr=1e-3, method='adam')
 
     # Update optimizer with new eta
     optimizer = update_optimizer_hyperparams(model, optimizer, args)
@@ -663,19 +628,39 @@ def update_optimizer_hyperparams(model, optimizer, args):
 
 
 if __name__ == "__main__":
-    sweep_config = get_sweep_config()
-    if not sweep_config:
-        raise ValueError("No sweep config received")
+    args = Config(
+        meta_optimizer="sgd",
+        use_64=0,
+        hv_r=1e-3,
+        dataset="fashionmnist",
+        project="test",
+        test_freq=10,
+        rng=44,
+        num_epoch=100,
+        batch_size=1000,
+        batch_size_vl=1000,
+        model_type="rnn",
+        opt_type="sgd",
+        xdim=28,
+        hdim=128,
+        ydim=10,
+        num_hlayers=1,
+        lr=1e-3,
+        mlr=1e-4,
+        lambda_l2=1e-4,
+        update_freq=1,
+        reset_freq=0,
+        valid_size=10000,
+        checkpoint_freq=10,
+        is_cuda=1,
+        save=0,
+        save_dir="~/temp",
+        soft_relu_clip=10000,
+        vl_grad_clip=1.0,
+        tr_grad_clip=1.0,
+    )
 
-    wandb_kwargs = {
-        "mode": "offline",
-        "group": sweep_config.name,
-        "config": sweep_config.config,
-        "project": sweep_config.config["project"],
-    }
-
-    with wandb.init(**wandb_kwargs) as run:
-        args = Config(**run.config)
+    with wandb.init(mode="offline", config=vars(args), project=args.project):
         if args.use_64:
             torch.set_default_dtype(torch.float64)
         seed = args.rng
