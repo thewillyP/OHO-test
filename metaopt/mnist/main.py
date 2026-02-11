@@ -54,13 +54,15 @@ class Config:
     save_dir: str = "/scratch"
     vl_grad_clip: float = None
     tr_grad_clip: float = None
+    mu: float = 0.1
 
 
 class VanillaRNNModel(nn.Module):
-    def __init__(self, input_size, hidden_size, num_layers, output_size, lr_init, lambda_l2, is_cuda):
+    def __init__(self, input_size, hidden_size, num_layers, output_size, lr_init, lambda_l2, is_cuda, mu):
         super(VanillaRNNModel, self).__init__()
         input_size = int(input_size)
         print(input_size)
+        self.mu = mu
 
         self.input_size = input_size
         self.hidden_size = hidden_size
@@ -112,18 +114,20 @@ class VanillaRNNModel(nn.Module):
     def update_dFdlr(self, Hv, param, grad):
         alpha = self.eta
         lambd = self.lambda_l2
+        mu = self.mu
         grad_term = grad + lambd * param
         self.Hlr_norm = torch.norm(alpha * Hv)
         self.dFdlr_norm = torch.norm(self.dFdlr)
-        self.dFdlr.data = self.dFdlr.data * (1 - lambd * alpha) - alpha * Hv - grad_term
+        self.dFdlr.data = self.dFdlr.data * (1 - mu * lambd * alpha) - mu * alpha * Hv - grad_term
 
     def update_dFdlambda_l2(self, Hv, param):
         alpha = self.eta
         lambd = self.lambda_l2
+        mu = self.mu
         self.Hl2 = alpha * Hv
         self.Hl2_norm = torch.norm(self.Hl2)
         self.dFdl2_norm = torch.norm(self.dFdl2)
-        self.dFdl2.data = self.dFdl2.data * (1 - lambd * alpha) - self.Hl2 - alpha * param
+        self.dFdl2.data = self.dFdl2.data * (1 - mu * lambd * alpha) - mu * self.Hl2 - alpha * param
 
     def update_hyperparams(self, delta_eta, delta_lambda, mlr=1e-3, method="adam", beta1=0.9, beta2=0.999, eps=1e-8):
         if not hasattr(self, "t"):
@@ -157,11 +161,12 @@ class VanillaRNNModel(nn.Module):
 
 
 class RNNModel(nn.Module):
-    def __init__(self, input_size, hidden_size, num_layers, output_size, lr_init, lambda_l2, is_cuda):
+    def __init__(self, input_size, hidden_size, num_layers, output_size, lr_init, lambda_l2, is_cuda, mu):
         super(RNNModel, self).__init__()
         input_size = int(input_size)
         print(input_size)
 
+        self.mu = mu
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.num_layers = num_layers
@@ -210,18 +215,20 @@ class RNNModel(nn.Module):
     def update_dFdlr(self, Hv, param, grad):
         alpha = self.eta
         lambd = self.lambda_l2
+        mu = self.mu
         grad_term = grad + lambd * param
         self.Hlr_norm = torch.norm(alpha * Hv)
         self.dFdlr_norm = torch.norm(self.dFdlr)
-        self.dFdlr.data = self.dFdlr.data * (1 - lambd * alpha) - alpha * Hv - grad_term
+        self.dFdlr.data = self.dFdlr.data * (1 - mu * lambd * alpha) - mu * alpha * Hv - grad_term
 
     def update_dFdlambda_l2(self, Hv, param):
         alpha = self.eta
         lambd = self.lambda_l2
+        mu = self.mu
         self.Hl2 = alpha * Hv
         self.Hl2_norm = torch.norm(self.Hl2)
         self.dFdl2_norm = torch.norm(self.dFdl2)
-        self.dFdl2.data = self.dFdl2.data * (1 - lambd * alpha) - self.Hl2 - alpha * param
+        self.dFdl2.data = self.dFdl2.data * (1 - mu * lambd * alpha) - mu * self.Hl2 - alpha * param
 
     def update_hyperparams(self, delta_eta, delta_lambda, mlr=1e-3, method="adam", beta1=0.9, beta2=0.999, eps=1e-8):
         if not hasattr(self, "t"):
@@ -617,6 +624,7 @@ if __name__ == "__main__":
         save_dir="~/temp",
         vl_grad_clip=1.0,
         tr_grad_clip=1.0,
+        mu=0.1,
     )
 
     with wandb.init(mode="offline", config=vars(args), project=args.project):
