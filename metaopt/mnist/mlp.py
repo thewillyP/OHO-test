@@ -164,8 +164,8 @@ class MLP(nn.Module):
             layer = getattr(self, attr)
             x = layer(x)
             if i_layer < self.n_layers - 1:
-                # x = F.relu(x)
-                x = torch.tanh(x)
+                x = F.relu(x)
+                # x = torch.tanh(x)
         if logsoftmaxF:
             return F.log_softmax(x, dim=1)
         else:

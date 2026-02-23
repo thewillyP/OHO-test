@@ -598,7 +598,7 @@ def update_optimizer_hyperparams(model, optimizer):
 
 if __name__ == "__main__":
     args = Config(
-        meta_optimizer="adam",
+        meta_optimizer="sgd",
         use_64=0,
         hv_r=1e-3,
         dataset="mnist",
@@ -608,9 +608,9 @@ if __name__ == "__main__":
         num_epoch=100,
         batch_size=1000,
         batch_size_vl=1000,
-        model_type="mlp",
+        model_type="rnn",
         opt_type="sgd",
-        xdim=28 * 28,
+        xdim=28,
         hdim=128,
         ydim=10,
         num_hlayers=1,
@@ -626,7 +626,7 @@ if __name__ == "__main__":
         save_dir="~/temp",
         vl_grad_clip=1.0,
         tr_grad_clip=1.0,
-        mu=0.1,
+        mu=0.0,
     )
 
     with wandb.init(mode="online", config=vars(args), project=args.project):
